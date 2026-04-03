@@ -220,6 +220,27 @@
         .logout-btn:hover {
             background: rgba(255, 255, 255, 0.2);
         }
+
+        .github-btn {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        .github-btn:hover {
+            background: rgba(255, 255, 255, 0.24);
+        }
+
+        .settings-note {
+            font-size: 12px;
+            color: #777;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .token-status {
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 6px;
+        }
         
         /* 4 MAIN MEASURES */
         .dashboard-summary {
@@ -842,6 +863,15 @@
                 </div>
                 
                 <div class="header-actions">
+                    <button class="logout-btn github-btn" onclick="openGitHubSettingsModal()" title="Set GitHub token and Gist ID">
+                        <i class="fab fa-github"></i> GitHub Setup
+                    </button>
+                    <button class="logout-btn github-btn" onclick="saveToGitHub()" title="Save all data to GitHub Gist">
+                        <i class="fab fa-github"></i> Save Cloud
+                    </button>
+                    <button class="logout-btn github-btn" onclick="loadFromGitHub()" title="Load all data from GitHub Gist">
+                        <i class="fab fa-github"></i> Load Cloud
+                    </button>
                     <button class="logout-btn" onclick="exportAllData()" title="Save all data to file">
                         <i class="fas fa-download"></i> Export
                     </button>
@@ -1148,6 +1178,30 @@
         </div>
     </div>
     
+    <div class="modal" id="gitHubSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fab fa-github"></i> GitHub Cloud Settings</h3>
+                <button class="modal-close" onclick="closeGitHubSettingsModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="githubTokenInput">GitHub Token</label>
+                <input type="password" id="githubTokenInput" placeholder="Paste a token with Gist access">
+                <div class="settings-note">Use a token that can create and update private Gists. The token is stored only in your browser local storage on this device.</div>
+                <div class="token-status" id="githubTokenStatus"></div>
+            </div>
+            <div class="form-group">
+                <label for="githubGistIdInput">Gist ID</label>
+                <input type="text" id="githubGistIdInput" placeholder="Will be filled automatically after first cloud save">
+                <div class="settings-note">Leave this blank the first time. The app will create a private Gist and save the ID automatically.</div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="saveGitHubSettings()"><i class="fas fa-save"></i> Save Settings</button>
+                <button class="btn btn-primary" onclick="testGitHubConnection()"><i class="fas fa-plug"></i> Test Connection</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scoring Info Modal -->
     <div class="modal" id="scoringInfoModal">
         <div class="modal-content">
@@ -1190,7 +1244,9 @@
             WORK_ITEMS: 'bop_dashboard_work_items',
             QUALITY_DATA: 'bop_dashboard_quality_data',
             IDEAS_DATA: 'bop_dashboard_ideas_data',
-            FEEDBACK_DATA: 'bop_dashboard_feedback_data'
+            FEEDBACK_DATA: 'bop_dashboard_feedback_data',
+            GITHUB_TOKEN: 'bop_dashboard_github_token',
+            GITHUB_GIST_ID: 'bop_dashboard_github_gist_id'
         };
         
         let currentUser = null;
@@ -1249,9 +1305,224 @@
             ];
         }
         
+        function getGitHubToken() {
+            return localStorage.getItem(STORAGE_KEYS.GITHUB_TOKEN) || '';
+        }
+
+        function getGitHubGistId() {
+            return localStorage.getItem(STORAGE_KEYS.GITHUB_GIST_ID) || '';
+        }
+
+        function setGitHubToken(token) {
+            if (token) localStorage.setItem(STORAGE_KEYS.GITHUB_TOKEN, token);
+            else localStorage.removeItem(STORAGE_KEYS.GITHUB_TOKEN);
+        }
+
+        function setGitHubGistId(gistId) {
+            if (gistId) localStorage.setItem(STORAGE_KEYS.GITHUB_GIST_ID, gistId);
+            else localStorage.removeItem(STORAGE_KEYS.GITHUB_GIST_ID);
+        }
+
+        function collectAppData() {
+            return {
+                app: 'BOP Performance Dashboard',
+                version: '1.1',
+                exportedAt: new Date().toISOString(),
+                data: {
+                    users: allUsers,
+                    workItems: workItems,
+                    qualityData: qualityData,
+                    ideasData: ideasData,
+                    feedbackData: feedbackData
+                }
+            };
+        }
+
+        function applyImportedData(importedData) {
+            allUsers = importedData.data.users || [];
+            workItems = importedData.data.workItems || [];
+            qualityData = importedData.data.qualityData || [];
+            ideasData = importedData.data.ideasData || [];
+            feedbackData = importedData.data.feedbackData || [];
+
+            workItems = workItems.map(item => {
+                if (item.delayJustification === undefined) item.delayJustification = "";
+                if (item.delayReason === undefined) item.delayReason = "";
+                if (item.confirmed === undefined) item.confirmed = false;
+                return item;
+            });
+
+            saveToLocalStorage();
+            updateDashboard();
+            loadTabContent();
+        }
+
+        function openGitHubSettingsModal() {
+            const token = getGitHubToken();
+            const gistId = getGitHubGistId();
+            document.getElementById('githubTokenInput').value = token;
+            document.getElementById('githubGistIdInput').value = gistId;
+            document.getElementById('githubTokenStatus').textContent = token ? 'Token saved on this browser.' : 'No token saved yet.';
+            document.getElementById('githubTokenStatus').style.color = token ? '#2e7d32' : '#ef6c00';
+            document.getElementById('gitHubSettingsModal').style.display = 'flex';
+        }
+
+        function closeGitHubSettingsModal() {
+            document.getElementById('gitHubSettingsModal').style.display = 'none';
+        }
+
+        function saveGitHubSettings() {
+            const token = document.getElementById('githubTokenInput').value.trim();
+            const gistId = document.getElementById('githubGistIdInput').value.trim();
+
+            if (!token) {
+                showAlert('Please enter your GitHub token.', 'error');
+                return;
+            }
+
+            setGitHubToken(token);
+            setGitHubGistId(gistId);
+            document.getElementById('githubTokenStatus').textContent = 'Settings saved on this browser.';
+            document.getElementById('githubTokenStatus').style.color = '#2e7d32';
+            showAlert('GitHub settings saved successfully.', 'success');
+        }
+
+        async function testGitHubConnection() {
+            const token = document.getElementById('githubTokenInput').value.trim() || getGitHubToken();
+            if (!token) {
+                showAlert('Please enter your GitHub token first.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('https://api.github.com/gists', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`GitHub returned ${response.status}`);
+                }
+
+                showAlert('GitHub connection successful.', 'success');
+            } catch (error) {
+                console.error(error);
+                showAlert('GitHub connection failed. Check the token and make sure it can access Gists.', 'error');
+            }
+        }
+
+        async function saveToGitHub() {
+            const token = getGitHubToken();
+            let gistId = getGitHubGistId();
+
+            if (!token) {
+                openGitHubSettingsModal();
+                showAlert('Please save your GitHub token first.', 'warning');
+                return;
+            }
+
+            const payload = collectAppData();
+            const body = {
+                description: `BOP Dashboard Data - ${new Date().toLocaleString()}`,
+                public: false,
+                files: {
+                    'bop-dashboard-data.json': {
+                        content: JSON.stringify(payload, null, 2)
+                    }
+                }
+            };
+
+            const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
+            const method = gistId ? 'PATCH' : 'POST';
+
+            try {
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    const msg = result && result.message ? result.message : `GitHub returned ${response.status}`;
+                    throw new Error(msg);
+                }
+
+                if (!gistId && result.id) {
+                    gistId = result.id;
+                    setGitHubGistId(gistId);
+                    const gistInput = document.getElementById('githubGistIdInput');
+                    if (gistInput) gistInput.value = gistId;
+                }
+
+                showAlert(gistId ? `Cloud save completed. Gist ID: ${gistId}` : 'Cloud save completed.', 'success');
+            } catch (error) {
+                console.error(error);
+                showAlert(`GitHub save failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadFromGitHub() {
+            const token = getGitHubToken();
+            const gistId = getGitHubGistId();
+
+            if (!token) {
+                openGitHubSettingsModal();
+                showAlert('Please save your GitHub token first.', 'warning');
+                return;
+            }
+
+            if (!gistId) {
+                openGitHubSettingsModal();
+                showAlert('Please add a Gist ID or save to cloud once first.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    const msg = result && result.message ? result.message : `GitHub returned ${response.status}`;
+                    throw new Error(msg);
+                }
+
+                const file = result.files['bop-dashboard-data.json'];
+                if (!file || !file.content) {
+                    throw new Error('bop-dashboard-data.json was not found in this Gist.');
+                }
+
+                const importedData = JSON.parse(file.content);
+                if (!importedData.app || !importedData.app.includes('BOP Performance Dashboard')) {
+                    throw new Error('This Gist does not contain valid BOP dashboard data.');
+                }
+
+                applyImportedData(importedData);
+                showAlert('Cloud data loaded successfully.', 'success');
+            } catch (error) {
+                console.error(error);
+                showAlert(`GitHub load failed: ${error.message}`, 'error');
+            }
+        }
+
         // ================ DATA SHARING ================
         function exportAllData() {
-            const allData = { app: "BOP Performance Dashboard", version: "1.0", exportedAt: new Date().toISOString(), data: { users: allUsers, workItems: workItems, qualityData: qualityData, ideasData: ideasData, feedbackData: feedbackData } };
+            const allData = collectAppData();
             const jsonData = JSON.stringify(allData, null, 2);
             const blob = new Blob([jsonData], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1281,21 +1552,7 @@
                             return;
                         }
                         if (confirm('⚠️ Importing data will replace ALL current data. Are you sure?')) {
-                            allUsers = importedData.data.users || [];
-                            workItems = importedData.data.workItems || [];
-                            qualityData = importedData.data.qualityData || [];
-                            ideasData = importedData.data.ideasData || [];
-                            feedbackData = importedData.data.feedbackData || [];
-                            // Ensure all work items have delayJustification and delayReason fields
-                            workItems = workItems.map(item => {
-                                if (item.delayJustification === undefined) item.delayJustification = "";
-                                if (item.delayReason === undefined) item.delayReason = "";
-                                if (item.confirmed === undefined) item.confirmed = false;
-                                return item;
-                            });
-                            saveToLocalStorage();
-                            updateDashboard();
-                            loadTabContent();
+                            applyImportedData(importedData);
                             showAlert('✅ Data imported successfully!', 'success');
                         }
                     } catch (error) {
@@ -2722,6 +2979,11 @@
             return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         }
         
+        window.onclick = function(event) {
+            const githubModal = document.getElementById('gitHubSettingsModal');
+            if (githubModal && event.target === githubModal) closeGitHubSettingsModal();
+        };
+
         function showAlert(message, type = 'info') {
             const alertDiv = document.createElement('div');
             alertDiv.style.cssText = `position: fixed; top: 20px; right: 20px; padding: 15px 20px; border-radius: 6px; color: white; font-weight: 500; z-index: 10000; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);`;
