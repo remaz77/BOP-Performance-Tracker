@@ -840,11 +840,18 @@
                     <input type="password" id="loginPassword" placeholder="••••••••" required>
                 </div>
                 <button type="submit">Sign In</button>
+                <button type="button" onclick="openGitHubSettingsModal()" style="width: 100%; padding: 14px; background: #24292f; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; margin-top: 10px;">
+                    <i class="fab fa-github" style="margin-right: 8px;"></i> GitHub Cloud Settings
+                </button>
             </form>
             
             <div class="login-links">
+                <a onclick="openGitHubSettingsModal()"><i class="fab fa-github" style="margin-right: 6px;"></i>GitHub Cloud Settings</a>
                 <a onclick="showSampleAccounts()">View Sample Accounts</a>
                 <a onclick="showDataSharingInfo()">How to Share Data Between Laptops</a>
+            </div>
+            <div class="settings-note" style="text-align: left; margin-top: 15px;">
+                You can set your GitHub token and Gist ID here before login, or from the main page header later.
             </div>
         </div>
     </div>
@@ -3027,7 +3034,7 @@ Each role has different permissions and views in the dashboard.`);
         }
         
         window.onclick = function(event) {
-            const modals = ['editIdeaModal', 'memberDetailsModal', 'addTeamMemberModal', 'editTeamMemberModal', 'scoringInfoModal'];
+            const modals = ['editIdeaModal', 'memberDetailsModal', 'addTeamMemberModal', 'editTeamMemberModal', 'gitHubSettingsModal', 'scoringInfoModal'];
             modals.forEach(id => {
                 const modal = document.getElementById(id);
                 if (event.target === modal) modal.style.display = 'none';
