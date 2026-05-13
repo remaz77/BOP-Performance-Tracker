@@ -1378,14 +1378,86 @@
             document.getElementById('gitHubSettingsModal').style.display = 'none';
         }
 
-        function saveGitHubSettings() {
-            const token = document.getElementById('githubTokenInput').value.trim();
-            const gistId = document.getElementById('githubGistIdInput').value.trim();
+      async function saveGitHubSettings() {
 
-            if (!token) {
-                showAlert('Please enter your GitHub token.', 'error');
-                return;
+    const token =
+        document.getElementById('githubTokenInput')
+        .value.trim();
+
+    const gistId =
+        document.getElementById('githubGistIdInput')
+        .value.trim();
+
+    if (!token) {
+
+        showAlert(
+            'Please enter your GitHub token.',
+            'error'
+        );
+
+        return;
+    }
+
+    setGitHubToken(token);
+    setGitHubGistId(gistId);
+
+    document.getElementById(
+        'githubTokenStatus'
+    ).textContent =
+        'Settings saved on this browser.';
+
+    document.getElementById(
+        'githubTokenStatus'
+    ).style.color = '#2e7d32';
+
+    try {
+
+        // AUTO LOAD CLOUD DATA
+        const response = await fetch(
+            `https://api.github.com/gists/${gistId}`,
+            {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github+json'
+                }
             }
+        );
+
+        const result = await response.json();
+
+        if (
+            result.files &&
+            result.files['bop-dashboard-data.json']
+        ) {
+
+            const file =
+                result.files['bop-dashboard-data.json'];
+
+            if (file.content) {
+
+                const importedData =
+                    JSON.parse(file.content);
+
+                applyImportedData(importedData);
+
+                showAlert(
+                    'Cloud data loaded successfully.',
+                    'success'
+                );
+            }
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        showAlert(
+            'Could not load cloud data.',
+            'error'
+        );
+    }
+}
 
             setGitHubToken(token);
             setGitHubGistId(gistId);
